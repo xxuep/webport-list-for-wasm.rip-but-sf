@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>angry neighbor</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #unity-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: pre-wrap;
+      text-align: center;
+      color: white;
+      background: black;
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      z-index: 10;
+      padding: 30px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="unity-canvas"></canvas>
+  <div id="loading">Loading angry neighbor...</div>
+
+  <script>
+    const base = "https://raw.githubusercontent.com/xxskidxx69420-ai/gtag-winterfeb2023-webgl/main/Build/";
+
+    const buildName = "GTAGWINTER23WEBXRTESTINGBOIII";
+
+    const dataPartCount = 20;
+    const wasmPartCount = 3;
+
+    async function fetchBlob(url, type = "application/octet-stream") {
+      const response = await fetch(url, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to download:\n" +
+          url +
+          "\nHTTP " +
+          response.status
+        );
+      }
+
+      const buffer = await response.arrayBuffer();
+
+      return new Blob([buffer], {
+        type: type
+      });
+    }
+
+    async function fetchObjectUrl(url, type) {
+      const blob = await fetchBlob(url, type);
+      return URL.createObjectURL(blob);
+    }
+
+    async function fetchParts(prefix, count, type, displayName, loading) {
+      const parts = [];
+
+      for (let i = 0; i < count; i++) {
+        const partNumber = String(i).padStart(2, "0");
+
+        loading.textContent =
+          "Downloading " +
+          displayName +
+          "...\nPart " +
+          partNumber +
+          " / " +
+          String(count - 1).padStart(2, "0");
+
+        const url =
+          base +
+          prefix +
+          partNumber;
+
+        const part = await fetchBlob(
+          url,
+          type
+        );
+
+        parts.push(part);
+      }
+
+      loading.textContent =
+        "Preparing " +
+        displayName +
+        "...";
+
+      const blob = new Blob(parts, {
+        type: type
+      });
+
+      return URL.createObjectURL(blob);
+    }
+
+    async function loadJavaScript(url) {
+      const response = await fetch(url, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to download loader:\n" +
+          url +
+          "\nHTTP " +
+          response.status
+        );
+      }
+
+      const source = await response.text();
+
+      const blob = new Blob([source], {
+        type: "application/javascript"
+      });
+
+      const blobUrl = URL.createObjectURL(blob);
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+
+        script.src = blobUrl;
+
+        script.onload = () => {
+          URL.revokeObjectURL(blobUrl);
+          resolve();
+        };
+
+        script.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+
+          reject(
+            new Error(
+              "Could not execute Unity loader."
+            )
+          );
+        };
+
+        document.body.appendChild(script);
+      });
+    }
+
+    async function startGame() {
+      const loading =
+        document.getElementById("loading");
+
+      const canvas =
+        document.getElementById("unity-canvas");
+
+      let dataUrl = null;
+      let frameworkUrl = null;
+      let wasmUrl = null;
+
+      try {
+        loading.textContent =
+          "Loading Unity loader...";
+
+        await loadJavaScript(
+          base +
+          buildName +
+          ".loader.js"
+        );
+
+        if (
+          typeof createUnityInstance !==
+          "function"
+        ) {
+          throw new Error(
+            "Unity loader loaded, but createUnityInstance was not found."
+          );
+        }
+
+        dataUrl = await fetchParts(
+          buildName + ".data.part",
+          dataPartCount,
+          "application/octet-stream",
+          "game data",
+          loading
+        );
+
+        loading.textContent =
+          "Downloading Unity framework...";
+
+        frameworkUrl =
+          await fetchObjectUrl(
+            base +
+            buildName +
+            ".framework.js",
+            "application/javascript"
+          );
+
+        wasmUrl = await fetchParts(
+          buildName + ".wasm.part",
+          wasmPartCount,
+          "application/wasm",
+          "WebAssembly",
+          loading
+        );
+
+        const config = {
+          dataUrl: dataUrl,
+
+          frameworkUrl: frameworkUrl,
+
+          codeUrl: wasmUrl,
+
+          streamingAssetsUrl:
+            base + "StreamingAssets",
+
+          companyName:
+            "another axiom",
+
+          productName:
+            "gorilla tag",
+
+          productVersion:
+            "1.0",
+
+          showBanner: function(message, type) {
+            console.log(
+              type + ": " + message
+            );
+
+            if (type === "error") {
+              loading.style.display =
+                "flex";
+
+              loading.textContent =
+                "UNITY ERROR\n\n" +
+                message;
+            }
+          }
+        };
+
+        loading.textContent =
+          "Starting gorilla tag...\nInitializing WebGL...";
+
+        const instance =
+          await createUnityInstance(
+            canvas,
+            config,
+            progress => {
+              const percent =
+                Math.round(
+                  progress * 100
+                );
+
+              loading.textContent =
+                "Starting gorilla tag...\n" +
+                percent +
+                "%";
+            }
+          );
+
+        window.unityInstance =
+          instance;
+
+        loading.style.display =
+          "none";
+
+        URL.revokeObjectURL(
+          dataUrl
+        );
+
+        URL.revokeObjectURL(
+          frameworkUrl
+        );
+
+        URL.revokeObjectURL(
+          wasmUrl
+        );
+      }
+      catch (error) {
+        console.error(error);
+
+        loading.style.display =
+          "flex";
+
+        loading.textContent =
+          "FAILED TO START gorilla tag\n\n" +
+          (
+            error && error.message
+              ? error.message
+              : String(error)
+          );
+      }
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
